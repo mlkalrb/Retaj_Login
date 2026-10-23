@@ -1,0 +1,121 @@
+const express = require("express");
+const session = require("express-session");
+const crypto = require("crypto");
+const path = require("path");
+
+const app = express();
+
+app.set("trust proxy", 1);
+app.use(express.json({ limit: "10kb" }));
+app.use(express.static(path.join(__dirname, "public")));
+
+app.use(session({
+  name: "retaj.sid",
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 60 * 60 * 1000
+  }
+}));
+
+function verifyTelegram(user) {
+  if (!user || typeof user.hash !== "string" ||
+      !/^[a-f0-9]{64}$/i.test(user.hash)) return false;
+
+  const authDate = Number(user.auth_date);
+  const now = Math.floor(Date.now() / 1000);
+
+  if (!Number.isInteger(authDate) ||
+      authDate > now + 30 || now - authDate > 300) {
+    return false;
+  }
+
+  const dataCheckString = Object.keys(user)
+    .filter(k => k !== "hash")
+    .sort()
+    .map(k => `${k}=${user[k]}`)
+    .join("\n");
+
+  const secret = crypto
+    .createHash("sha256")
+    .update(process.env.BOT_TOKEN)
+    .digest();
+
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(dataCheckString)
+    .digest();
+
+  const received = Buffer.from(user.hash, "hex");
+
+  return received.length === expected.length &&
+    crypto.timingSafeEqual(received, expected);
+}
+
+app.post("/auth/telegram", (req, res, next) => {
+  const user = req.body;
+
+  if (!verifyTelegram(user)) {
+    return res.status(401).json({
+      error: "تعذر التحقق من هوية Telegram"
+    });
+  }
+
+  if (!Number.isSafeInteger(user.id) || user.id <= 0) {
+    return res.status(400).json({
+      error: "معرّف المستخدم غير صالح"
+    });
+  }
+
+  req.session.regenerate(err => {
+    if (err) return next(err);
+
+    req.session.user = {
+      id: user.id,
+      first_name: String(user.first_name || ""),
+      username: String(user.username || "")
+    };
+
+    req.session.save(err => {
+      if (err) return next(err);
+      res.json({ ok: true });
+    });
+  });
+});
+
+app.get("/dashboard", (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).send("يرجى تسجيل الدخول أولاً.");
+  }
+
+  res.send(
+    "مرحباً بك في ريتاج، " +
+    req.session.user.first_name
+  );
+});
+
+app.post("/logout", (req, res) => {
+  req.session.destroy(err => {
+    if (err) return res.sendStatus(500);
+
+    res.clearCookie("retaj.sid", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax"
+    });
+
+    res.json({ ok: true });
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", app: "Retaj" });
+});
+
+app.listen(process.env.PORT || 3000, "0.0.0.0", () => {
+  console.log("Retaj server started");
+});
