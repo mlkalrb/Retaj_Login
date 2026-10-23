@@ -1,0 +1,99 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101827">
+  <title>ريتاج | Retaj</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: #101827;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+    main {
+      width: 100%;
+      max-width: 420px;
+      padding: 32px 22px;
+      text-align: center;
+      border: 1px solid #334155;
+      border-radius: 22px;
+      background: #182337;
+    }
+    .logo {
+      font-size: 54px;
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0 0 12px; }
+    p { color: #cbd5e1; line-height: 1.8; }
+    #login { margin: 24px 0; }
+    #status { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="logo">🔷</div>
+    <h1>ريتاج | Retaj</h1>
+    <p>مرحبًا بك. سجّل الدخول باستخدام Telegram
+       بعد موافقتك على مشاركة هويتك.</p>
+
+    <div id="login"></div>
+    <p id="status" role="status">جارٍ تجهيز تسجيل الدخول...</p>
+  </main>
+
+  <script>
+    const status = document.getElementById("status");
+    const login = document.getElementById("login");
+
+    // ضع اسم مستخدم بوتك هنا دون علامة @
+    const BOT_USERNAME = "Retaj_Login_Bot";
+
+    if (BOT_USERNAME === "Retaj_Login_Bot") {
+      status.textContent =
+        "يجب إعداد اسم مستخدم البوت قبل تفعيل تسجيل الدخول.";
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://telegram.org/js/telegram-widget.js?22";
+      script.async = true;
+      script.setAttribute("data-telegram-login", BOT_USERNAME);
+      script.setAttribute("data-size", "large");
+      script.setAttribute("data-userpic", "false");
+      script.setAttribute("data-onauth", "onTelegramAuth(user)");
+      script.setAttribute("data-request-access", "write");
+      login.appendChild(script);
+    }
+
+    async function onTelegramAuth(user) {
+      status.textContent = "جارٍ التحقق من الهوية...";
+
+      try {
+        const response = await fetch("/auth/telegram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(user)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || "فشل تسجيل الدخول");
+        }
+
+        status.textContent = "تم التحقق بنجاح.";
+        window.location.href = "/dashboard";
+      } catch (error) {
+        status.textContent =
+          error.message || "تعذر الاتصال بالخادم.";
+      }
+    }
+  </script>
+</body>
+</html>
